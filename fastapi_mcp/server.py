@@ -3,7 +3,7 @@ import httpx
 from typing import Dict, Optional, Any, List, Union, Literal, Sequence
 from typing_extensions import Annotated, Doc
 
-from fastapi import FastAPI, Request, APIRouter, params
+from fastapi import FastAPI, Request, APIRouter, params, WebSocket
 from fastapi.openapi.utils import get_openapi
 from mcp.server.lowlevel.server import Server
 import mcp.types as types
@@ -11,6 +11,7 @@ import mcp.types as types
 from fastapi_mcp.openapi.convert import convert_openapi_to_mcp_tools
 from fastapi_mcp.transport.sse import FastApiSseTransport
 from fastapi_mcp.transport.http import FastApiHttpSessionManager
+from fastapi_mcp.transport.websocket import FastApiWebSocketTransport
 from fastapi_mcp.types import HTTPRequestInfo, AuthConfig
 
 import logging
@@ -120,6 +121,7 @@ class FastApiMCP:
 
         self._forward_headers = {h.lower() for h in headers}
         self._http_transport: FastApiHttpSessionManager | None = None  # Store reference to HTTP transport for cleanup
+        self._websocket_transport: FastApiWebSocketTransport | None = None  # Store reference to WebSocket transport for cleanup
 
         self.setup_server()
 
@@ -253,6 +255,26 @@ class FastApiMCP:
         dependencies: Optional[Sequence[params.Depends]],
     ):
         self._register_mcp_http_endpoint(router, transport, mount_path, dependencies)
+
+    def _register_mcp_websocket_endpoint(
+        self,
+        router: FastAPI | APIRouter,
+        transport: FastApiWebSocketTransport,
+        mount_path: str,
+        dependencies: Optional[Sequence[params.Depends]],
+    ):
+        @router.websocket(mount_path, dependencies=dependencies)
+        async def handle_mcp_websocket(websocket: WebSocket, session_id: Optional[str] = None):
+            await transport.handle_fastapi_websocket(websocket, session_id)
+
+    def _register_mcp_endpoints_websocket(
+        self,
+        router: FastAPI | APIRouter,
+        transport: FastApiWebSocketTransport,
+        mount_path: str,
+        dependencies: Optional[Sequence[params.Depends]],
+    ):
+        self._register_mcp_websocket_endpoint(router, transport, mount_path, dependencies)
 
     def _setup_auth_2025_03_26(self):
         from fastapi_mcp.auth.proxy import (
@@ -422,6 +444,89 @@ class FastApiMCP:
             self.fastapi.include_router(router)
 
         logger.info(f"MCP SSE server listening at {mount_path}")
+
+    def mount_websocket(
+        self,
+        router: Annotated[
+            Optional[FastAPI | APIRouter],
+            Doc(
+                """
+                The FastAPI app or APIRouter to mount the MCP server to. If not provided, the MCP
+                server will be mounted to the FastAPI app.
+                """
+            ),
+        ] = None,
+        mount_path: Annotated[
+            str,
+            Doc(
+                """
+                Path where the MCP WebSocket server will be mounted.
+                Mount path is appended to the root path of FastAPI router, or to the prefix of APIRouter.
+                Defaults to '/ws'.
+                """
+            ),
+        ] = "/ws",
+        external_ws_url: Annotated[
+            Optional[str],
+            Doc(
+                """
+                Optional external WebSocket URL to connect to as a client.
+                If provided, the server will also act as a WebSocket client.
+                """
+            ),
+        ] = None,
+    ) -> None:
+        """
+        Mount the MCP server with WebSocket transport to **any** FastAPI app or APIRouter.
+
+        This enables bidirectional communication over WebSocket connections.
+        The server can handle incoming WebSocket connections and optionally connect 
+        to external WebSocket servers as a client.
+
+        There is no requirement that the FastAPI app or APIRouter is the same as the one that the MCP
+        server was created from.
+        
+        Args:
+            router: The FastAPI app or APIRouter to mount to
+            mount_path: Path where the WebSocket endpoint will be available
+            external_ws_url: Optional external WebSocket URL to connect to
+        """
+        # Normalize mount path
+        if not mount_path.startswith("/"):
+            mount_path = f"/{mount_path}"
+        if mount_path.endswith("/"):
+            mount_path = mount_path[:-1]
+
+        if not router:
+            router = self.fastapi
+
+        assert isinstance(router, (FastAPI, APIRouter)), f"Invalid router type: {type(router)}"
+
+        websocket_transport = FastApiWebSocketTransport(
+            mcp_server=self.server,
+            external_ws_url=external_ws_url
+        )
+        dependencies = self._auth_config.dependencies if self._auth_config else None
+
+        self._register_mcp_endpoints_websocket(router, websocket_transport, mount_path, dependencies)
+        self._setup_auth()
+        self._websocket_transport = websocket_transport  # Store reference
+
+        # HACK: If we got a router and not a FastAPI instance, we need to re-include the router so that
+        # FastAPI will pick up the new routes we added. The problem with this approach is that we assume
+        # that the router is a sub-router of self.fastapi, which may not always be the case.
+        #
+        # TODO: Find a better way to do this.
+        if isinstance(router, APIRouter):
+            self.fastapi.include_router(router)
+
+        # Connect to external WebSocket if URL provided
+        if external_ws_url:
+            import asyncio
+            asyncio.create_task(websocket_transport.connect_to_external_websocket(external_ws_url))
+            logger.info(f"MCP WebSocket server listening at {mount_path} and connecting to {external_ws_url}")
+        else:
+            logger.info(f"MCP WebSocket server listening at {mount_path}")
 
     def mount(
         self,
@@ -654,3 +759,35 @@ class FastApiMCP:
             }
 
         return filtered_tools
+
+    async def shutdown(self) -> None:
+        """
+        Shutdown the FastAPI-MCP server and clean up all transports.
+        
+        This method should be called when the application is shutting down
+        to ensure proper cleanup of resources.
+        """
+        logger.info("Shutting down FastAPI-MCP server")
+
+        # Shutdown HTTP transport
+        if self._http_transport:
+            try:
+                await self._http_transport.shutdown()
+            except Exception as e:
+                logger.error(f"Error shutting down HTTP transport: {e}")
+
+        # Shutdown WebSocket transport
+        if self._websocket_transport:
+            try:
+                await self._websocket_transport.shutdown()
+            except Exception as e:
+                logger.error(f"Error shutting down WebSocket transport: {e}")
+
+        # Close HTTP client
+        if self._http_client:
+            try:
+                await self._http_client.aclose()
+            except Exception as e:
+                logger.error(f"Error closing HTTP client: {e}")
+
+        logger.info("FastAPI-MCP server shutdown complete")
