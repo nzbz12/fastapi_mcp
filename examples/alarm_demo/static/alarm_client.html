@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能闹钟客户端</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff6b6b, #feca57);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+
+        .panel {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+        }
+
+        .panel h3 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,123,255,0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745, #1e7e34);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545, #bd2130);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ffc107, #e0a800);
+            color: #212529;
+        }
+
+        .alarms-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .alarm-item {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .alarm-item:hover {
+            transform: translateY(-2px);
+        }
+
+        .alarm-item.triggered {
+            border-left: 5px solid #dc3545;
+            animation: glow 1s infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 2px 8px rgba(220,53,69,0.3); }
+            to { box-shadow: 0 5px 20px rgba(220,53,69,0.6); }
+        }
+
+        .alarm-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .alarm-name {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .alarm-time {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .alarm-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+
+        .alarm-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .alarm-actions .btn {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .websocket-log {
+            background: #212529;
+            color: #28a745;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+        }
+
+        .log-timestamp {
+            color: #6c757d;
+        }
+
+        .log-type-error {
+            color: #dc3545;
+        }
+
+        .log-type-info {
+            color: #17a2b8;
+        }
+
+        .log-type-success {
+            color: #28a745;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-width: 400px;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .notification-title {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .notification-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #6c757d;
+        }
+
+        .notification-body {
+            color: #6c757d;
+            margin-bottom: 15px;
+        }
+
+        .notification-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .status-bar {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔔 智能闹钟客户端</h1>
+            <p>实时 WebSocket 连接演示</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-dot" id="ws-status"></div>
+                <span id="ws-status-text">WebSocket: 连接中...</span>
+            </div>
+            <div class="status-item">
+                <span id="current-time"></span>
+            </div>
+            <div class="status-item">
+                <span id="alarm-count">闹钟: 0</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="panel">
+                <h3>📝 创建新闹钟</h3>
+                <div class="form-group">
+                    <label for="alarm-name">闹钟名称</label>
+                    <input type="text" id="alarm-name" placeholder="输入闹钟名称">
+                </div>
+                <div class="form-group">
+                    <label for="alarm-time">时间</label>
+                    <input type="time" id="alarm-time">
+                </div>
+                <div class="form-group">
+                    <label for="repeat-mode">重复模式</label>
+                    <select id="repeat-mode">
+                        <option value="once">只响一次</option>
+                        <option value="daily">每天</option>
+                        <option value="weekly">每周</option>
+                        <option value="weekdays">工作日</option>
+                        <option value="weekends">周末</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="alarm-tone">铃声</label>
+                    <select id="alarm-tone">
+                        <option value="beep">哔哔声</option>
+                        <option value="chime">钟声</option>
+                        <option value="bell">铃声</option>
+                        <option value="buzz">蜂鸣声</option>
+                        <option value="melody">旋律</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="alarm-volume">音量: <span id="volume-display">50</span></label>
+                    <input type="range" id="alarm-volume" min="0" max="100" value="50">
+                </div>
+                <button class="btn" onclick="createAlarm()">创建闹钟</button>
+            </div>
+
+            <div class="panel">
+                <h3>📋 闹钟列表</h3>
+                <div class="alarms-list" id="alarms-list">
+                    <p style="text-align: center; color: #6c757d; margin: 50px 0;">暂无闹钟</p>
+                </div>
+                <button class="btn btn-success" onclick="loadAlarms()" style="margin-top: 15px;">刷新列表</button>
+            </div>
+        </div>
+
+        <div class="panel" style="margin: 0 30px 30px;">
+            <h3>📡 WebSocket 日志</h3>
+            <div class="websocket-log" id="websocket-log">
+                <div class="log-entry">
+                    <span class="log-timestamp">[等待连接...]</span>
+                    <span class="log-type-info">正在连接到 WebSocket 服务器...</span>
+                </div>
+            </div>
+            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <button class="btn" onclick="connectWebSocket()">重新连接</button>
+                <button class="btn btn-warning" onclick="subscribeAlarms()">订阅通知</button>
+                <button class="btn btn-danger" onclick="clearLog()">清空日志</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 闹钟通知 -->
+    <div class="notification" id="alarm-notification">
+        <div class="notification-header">
+            <div class="notification-title">🔔 闹钟提醒</div>
+            <button class="notification-close" onclick="hideNotification()">&times;</button>
+        </div>
+        <div class="notification-body" id="notification-body">
+            闹钟响了！
+        </div>
+        <div class="notification-actions">
+            <button class="btn btn-warning" onclick="snoozeAlarm()">暂停</button>
+            <button class="btn btn-danger" onclick="dismissAlarm()">关闭</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentAlarmId = null;
+        let isSubscribed = false;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCurrentTime();
+            setInterval(updateCurrentTime, 1000);
+            
+            // 设置默认时间为当前时间 + 1分钟
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + 1);
+            document.getElementById('alarm-time').value = now.toTimeString().slice(0, 5);
+            
+            // 音量滑块事件
+            document.getElementById('alarm-volume').addEventListener('input', function() {
+                document.getElementById('volume-display').textContent = this.value;
+            });
+            
+            connectWebSocket();
+            loadAlarms();
+        });
+
+        // 更新当前时间
+        function updateCurrentTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = 
+                '当前时间: ' + now.toLocaleTimeString();
+        }
+
+        // WebSocket 连接
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+
+            const wsUrl = `ws://${window.location.host}/ws?client_id=alarm_client`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function(event) {
+                updateWSStatus(true, 'WebSocket: 已连接');
+                addLog('WebSocket 连接成功', 'success');
+                if (!isSubscribed) {
+                    subscribeAlarms();
+                }
+            };
+
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                handleWebSocketMessage(message);
+            };
+
+            ws.onclose = function(event) {
+                updateWSStatus(false, 'WebSocket: 已断开');
+                addLog('WebSocket 连接关闭', 'error');
+                isSubscribed = false;
+            };
+
+            ws.onerror = function(error) {
+                updateWSStatus(false, 'WebSocket: 连接失败');
+                addLog('WebSocket 连接错误: ' + error, 'error');
+            };
+        }
+
+        // 更新 WebSocket 状态
+        function updateWSStatus(connected, text) {
+            const statusDot = document.getElementById('ws-status');
+            const statusText = document.getElementById('ws-status-text');
+            
+            statusDot.style.background = connected ? '#28a745' : '#dc3545';
+            statusText.textContent = text;
+        }
+
+        // 处理 WebSocket 消息
+        function handleWebSocketMessage(message) {
+            addLog(`收到消息: ${message.type}`, 'info');
+            
+            switch (message.type) {
+                case 'welcome':
+                    addLog(`欢迎消息: ${message.data.message}`, 'success');
+                    break;
+                    
+                case 'subscription_confirmed':
+                    isSubscribed = true;
+                    addLog('已订阅闹钟通知', 'success');
+                    break;
+                    
+                case 'alarm_triggered':
+                    handleAlarmTriggered(message.data);
+                    break;
+                    
+                case 'alarm_dismissed':
+                case 'alarm_snoozed':
+                    addLog(`闹钟操作: ${message.data.message}`, 'success');
+                    hideNotification();
+                    loadAlarms();
+                    break;
+                    
+                case 'error':
+                    addLog(`错误: ${message.data.message}`, 'error');
+                    break;
+                    
+                default:
+                    addLog(`未知消息类型: ${message.type}`, 'info');
+            }
+        }
+
+        // 处理闹钟触发
+        function handleAlarmTriggered(data) {
+            currentAlarmId = data.alarm_id;
+            document.getElementById('notification-body').innerHTML = `
+                <strong>${data.alarm_name}</strong><br>
+                时间: ${new Date(data.triggered_at).toLocaleTimeString()}<br>
+                铃声: ${data.tone} | 音量: ${data.volume}%<br>
+                ${data.message}
+            `;
+            showNotification();
+            addLog(`闹钟触发: ${data.alarm_name}`, 'error');
+            loadAlarms(); // 刷新闹钟列表
+        }
+
+        // 显示通知
+        function showNotification() {
+            const notification = document.getElementById('alarm-notification');
+            notification.classList.add('show');
+            
+            // 播放声音提示（如果浏览器支持）
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance('闹钟响了！');
+                utterance.lang = 'zh-CN';
+                speechSynthesis.speak(utterance);
+            }
+        }
+
+        // 隐藏通知
+        function hideNotification() {
+            const notification = document.getElementById('alarm-notification');
+            notification.classList.remove('show');
+            currentAlarmId = null;
+        }
+
+        // 暂停闹钟
+        function snoozeAlarm() {
+            if (currentAlarmId && ws && ws.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'snooze_alarm',
+                    data: { alarm_id: currentAlarmId }
+                };
+                ws.send(JSON.stringify(message));
+                addLog('发送暂停闹钟请求', 'info');
+            }
+        }
+
+        // 关闭闹钟
+        function dismissAlarm() {
+            if (currentAlarmId && ws && ws.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'dismiss_alarm',
+                    data: { alarm_id: currentAlarmId }
+                };
+                ws.send(JSON.stringify(message));
+                addLog('发送关闭闹钟请求', 'info');
+            }
+        }
+
+        // 订阅闹钟通知
+        function subscribeAlarms() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'subscribe_alarms',
+                    data: {}
+                };
+                ws.send(JSON.stringify(message));
+                addLog('发送订阅请求', 'info');
+            }
+        }
+
+        // 添加日志
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('websocket-log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-timestamp">[${timestamp}]</span>
+                <span class="log-type-${type}">${message}</span>
+            `;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // 清空日志
+        function clearLog() {
+            document.getElementById('websocket-log').innerHTML = '';
+        }
+
+        // 创建闹钟
+        async function createAlarm() {
+            const name = document.getElementById('alarm-name').value;
+            const time = document.getElementById('alarm-time').value;
+            const repeatMode = document.getElementById('repeat-mode').value;
+            const tone = document.getElementById('alarm-tone').value;
+            const volume = document.getElementById('alarm-volume').value;
+
+            if (!name || !time) {
+                alert('请填写闹钟名称和时间');
+                return;
+            }
+
+            const alarmData = {
+                name: name,
+                time: time,
+                repeat_mode: repeatMode,
+                tone: tone,
+                volume: parseInt(volume),
+                enabled: true
+            };
+
+            try {
+                const response = await fetch('/alarms/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(alarmData)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    addLog(`创建闹钟成功: ${name}`, 'success');
+                    // 清空表单
+                    document.getElementById('alarm-name').value = '';
+                    loadAlarms();
+                } else {
+                    addLog(`创建闹钟失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`创建闹钟出错: ${error.message}`, 'error');
+            }
+        }
+
+        // 加载闹钟列表
+        async function loadAlarms() {
+            try {
+                const response = await fetch('/alarms/');
+                const result = await response.json();
+                
+                displayAlarms(result.alarms);
+                document.getElementById('alarm-count').textContent = `闹钟: ${result.total}`;
+                addLog(`加载闹钟列表: ${result.total} 个闹钟`, 'info');
+            } catch (error) {
+                addLog(`加载闹钟失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 显示闹钟列表
+        function displayAlarms(alarms) {
+            const container = document.getElementById('alarms-list');
+            
+            if (alarms.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #6c757d; margin: 50px 0;">暂无闹钟</p>';
+                return;
+            }
+
+            container.innerHTML = alarms.map(alarm => {
+                const statusClass = alarm.status === 'triggered' ? 'triggered' : '';
+                const enabledText = alarm.enabled ? '启用' : '禁用';
+                const enabledColor = alarm.enabled ? '#28a745' : '#6c757d';
+                
+                return `
+                    <div class="alarm-item ${statusClass}">
+                        <div class="alarm-header">
+                            <div class="alarm-name">${alarm.name}</div>
+                            <div class="alarm-time">${alarm.time}</div>
+                        </div>
+                        <div class="alarm-details">
+                            <div>重复: ${getRepeatModeText(alarm.repeat_mode)}</div>
+                            <div>铃声: ${getToneText(alarm.tone)}</div>
+                            <div>音量: ${alarm.volume}%</div>
+                            <div style="color: ${enabledColor}">状态: ${enabledText}</div>
+                            <div>状态: ${getStatusText(alarm.status)}</div>
+                        </div>
+                        <div class="alarm-actions">
+                            <button class="btn" onclick="toggleAlarm('${alarm.id}')">${alarm.enabled ? '禁用' : '启用'}</button>
+                            <button class="btn btn-warning" onclick="editAlarm('${alarm.id}')">编辑</button>
+                            <button class="btn btn-danger" onclick="deleteAlarm('${alarm.id}')">删除</button>
+                            ${alarm.status === 'triggered' ? `
+                                <button class="btn btn-warning" onclick="snoozeAlarmById('${alarm.id}')">暂停</button>
+                                <button class="btn btn-danger" onclick="dismissAlarmById('${alarm.id}')">关闭</button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 获取重复模式文本
+        function getRepeatModeText(mode) {
+            const modes = {
+                'once': '只响一次',
+                'daily': '每天',
+                'weekly': '每周',
+                'weekdays': '工作日',
+                'weekends': '周末'
+            };
+            return modes[mode] || mode;
+        }
+
+        // 获取铃声文本
+        function getToneText(tone) {
+            const tones = {
+                'beep': '哔哔声',
+                'chime': '钟声',
+                'bell': '铃声',
+                'buzz': '蜂鸣声',
+                'melody': '旋律'
+            };
+            return tones[tone] || tone;
+        }
+
+        // 获取状态文本
+        function getStatusText(status) {
+            const statuses = {
+                'active': '活跃',
+                'inactive': '非活跃',
+                'triggered': '已触发',
+                'snoozed': '暂停中'
+            };
+            return statuses[status] || status;
+        }
+
+        // 切换闹钟状态
+        async function toggleAlarm(alarmId) {
+            try {
+                const response = await fetch(`/alarms/${alarmId}/toggle`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog(`切换闹钟状态成功: ${result.message}`, 'success');
+                    loadAlarms();
+                } else {
+                    addLog(`切换闹钟状态失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`切换闹钟状态出错: ${error.message}`, 'error');
+            }
+        }
+
+        // 删除闹钟
+        async function deleteAlarm(alarmId) {
+            if (!confirm('确定要删除这个闹钟吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/alarms/${alarmId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog(`删除闹钟成功: ${result.message}`, 'success');
+                    loadAlarms();
+                } else {
+                    addLog(`删除闹钟失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`删除闹钟出错: ${error.message}`, 'error');
+            }
+        }
+
+        // 编辑闹钟（简化版）
+        function editAlarm(alarmId) {
+            const newName = prompt('请输入新的闹钟名称:');
+            if (newName) {
+                updateAlarm(alarmId, { name: newName });
+            }
+        }
+
+        // 更新闹钟
+        async function updateAlarm(alarmId, updateData) {
+            try {
+                const response = await fetch(`/alarms/${alarmId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateData)
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog(`更新闹钟成功: ${result.message}`, 'success');
+                    loadAlarms();
+                } else {
+                    addLog(`更新闹钟失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`更新闹钟出错: ${error.message}`, 'error');
+            }
+        }
+
+        // 通过 API 暂停闹钟
+        async function snoozeAlarmById(alarmId) {
+            try {
+                const response = await fetch(`/alarms/${alarmId}/snooze`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog(`暂停闹钟成功: ${result.message}`, 'success');
+                    loadAlarms();
+                } else {
+                    addLog(`暂停闹钟失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`暂停闹钟出错: ${error.message}`, 'error');
+            }
+        }
+
+        // 通过 API 关闭闹钟
+        async function dismissAlarmById(alarmId) {
+            try {
+                const response = await fetch(`/alarms/${alarmId}/dismiss`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog(`关闭闹钟成功: ${result.message}`, 'success');
+                    loadAlarms();
+                } else {
+                    addLog(`关闭闹钟失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`关闭闹钟出错: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
