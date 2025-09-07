@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>关键词搜索与爬取示例</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Segoe UI Emoji", sans-serif; margin: 2rem auto; max-width: 900px; padding: 0 1rem; }
+      h1 { font-size: 1.6rem; }
+      form { display: flex; gap: 0.5rem; margin: 1rem 0; }
+      input[type="text"] { flex: 1; padding: 0.6rem 0.8rem; border: 1px solid #999; border-radius: 8px; }
+      button { padding: 0.6rem 1rem; border: 1px solid #555; background: #222; color: white; border-radius: 8px; cursor: pointer; }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      ul { list-style: none; padding: 0; margin: 1rem 0; }
+      li { padding: 0.8rem 0; border-bottom: 1px solid #4443; }
+      .title { font-weight: 600; }
+      .url { color: #2b7; font-size: 0.9rem; word-break: break-all; }
+      .snippet { margin-top: 0.25rem; opacity: 0.85; }
+      .meta { font-size: 0.85rem; opacity: 0.8; }
+      .error { color: #e33; }
+    </style>
+  </head>
+  <body>
+    <h1>关键词搜索与爬取示例</h1>
+    <p class="meta">输入关键词后，系统将爬取 DuckDuckGo 的搜索结果（前若干条）。</p>
+
+    <form id="search-form">
+      <input id="query" type="text" placeholder="请输入关键词，例如：Python 爬虫" required />
+      <button id="submit" type="submit">搜索</button>
+    </form>
+
+    <div id="status" class="meta"></div>
+    <div id="error" class="error"></div>
+    <ul id="results"></ul>
+
+    <script>
+      const form = document.getElementById('search-form');
+      const queryInput = document.getElementById('query');
+      const resultsEl = document.getElementById('results');
+      const errorEl = document.getElementById('error');
+      const statusEl = document.getElementById('status');
+
+      function renderResults(items) {
+        resultsEl.innerHTML = '';
+        for (const item of items) {
+          const li = document.createElement('li');
+          const title = document.createElement('div');
+          title.className = 'title';
+          const a = document.createElement('a');
+          a.href = item.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = item.title || item.url;
+          title.appendChild(a);
+
+          const url = document.createElement('div');
+          url.className = 'url';
+          url.textContent = item.url;
+
+          const snippet = document.createElement('div');
+          snippet.className = 'snippet';
+          snippet.textContent = item.snippet || '';
+
+          li.appendChild(title);
+          li.appendChild(url);
+          li.appendChild(snippet);
+          resultsEl.appendChild(li);
+        }
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const q = queryInput.value.trim();
+        if (!q) return;
+        errorEl.textContent = '';
+        resultsEl.innerHTML = '';
+        statusEl.textContent = '正在请求与解析…';
+        try {
+          const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&num=10`, { method: 'GET' });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || `请求失败: ${res.status}`);
+          }
+          renderResults(data.results || []);
+          statusEl.textContent = `已返回 ${data.results?.length || 0} 条结果`;
+        } catch (err) {
+          errorEl.textContent = err.message || String(err);
+          statusEl.textContent = '';
+        }
+      });
+    </script>
+  </body>
+  </html>
+
